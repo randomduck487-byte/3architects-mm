@@ -1,0 +1,39 @@
+local function SetupLightStand(model)
+		if not model:IsA("Model") then
+			return
+		end
+
+		-- Prevent processing the same model or the replacement model itself
+		if model:GetAttribute("IsReplaced") then
+			return
+		end
+
+		local hasEnabledLight = false
+
+		for _, v in ipairs(model:GetDescendants()) do
+			if (v:IsA("PointLight")
+				or v:IsA("SpotLight")
+				or v:IsA("SurfaceLight"))
+				and v.Enabled then
+				hasEnabledLight = true
+				break
+			end
+		end
+
+		if not hasEnabledLight then
+			return
+		end
+
+		-- Mark the original model so it isn't processed twice
+		model:SetAttribute("IsReplaced", true)
+
+		local torch = LightReplaceModel:Clone()
+		-- Mark the clone so DescendantAdded ignores it completely
+		torch:SetAttribute("IsReplaced", true)
+		
+		torch:PivotTo(model:GetPivot())
+		torch.Parent = model.Parent
+		
+		-- Optional: Destroy the old light model if you want to replace it entirely instead of stacking
+		model:Destroy()
+	end
