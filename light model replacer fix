@@ -1,9 +1,21 @@
-local function SetupLightStand(model)
+coroutine.wrap(function()
+	local CurrentRooms = workspace:WaitForChild("CurrentRooms")
+	local LatestRoom = game:GetService("ReplicatedStorage"):WaitForChild("GameData"):WaitForChild("LatestRoom")
+
+	local FileName = "LightStand.txt"
+
+	if not isfile(FileName) then
+		writefile(FileName, game:HttpGet("https://raw.githubusercontent.com/lynguyen26031993-design/-u/refs/heads/main/Place_131351567799504_Model_LightStand_1785518305.txt"))
+	end
+
+	local LightReplaceModel = game:GetObjects(getcustomasset(FileName))[1]
+
+	local function SetupLightStand(model)
 		if not model:IsA("Model") then
 			return
 		end
 
-		-- Prevent processing the same model or the replacement model itself
+		-- Prevent processing models that have already been replaced
 		if model:GetAttribute("IsReplaced") then
 			return
 		end
@@ -24,16 +36,52 @@ local function SetupLightStand(model)
 			return
 		end
 
-		-- Mark the original model so it isn't processed twice
+		-- Mark the original model so it isn't processed again
 		model:SetAttribute("IsReplaced", true)
 
+		-- Clone and position the replacement model
 		local torch = LightReplaceModel:Clone()
-		-- Mark the clone so DescendantAdded ignores it completely
-		torch:SetAttribute("IsReplaced", true)
-		
+		torch:SetAttribute("IsReplaced", true) -- Prevent DescendantAdded from looping on the clone
 		torch:PivotTo(model:GetPivot())
 		torch.Parent = model.Parent
-		
-		-- Optional: Destroy the old light model if you want to replace it entirely instead of stacking
+
+		-- Destroy the old light model so it's fully replaced instead of duplicated
 		model:Destroy()
 	end
+
+	local function HookRoom(room)
+		local assets = room:FindFirstChild("Assets")
+		if not assets then
+			return
+		end
+
+		local fixtures = assets:FindFirstChild("Light_Fixtures")
+		if not fixtures then
+			return
+		end
+
+		for _, v in ipairs(fixtures:GetDescendants()) do
+			if v:IsA("Model") and (v.Name == "LightStand" or v.Name == "LightStandSingle") then
+				SetupLightStand(v)
+			end
+		end
+
+		fixtures.DescendantAdded:Connect(function(v)
+			if v:IsA("Model") and (v.Name == "LightStand" or v.Name == "LightStandSingle") then
+				SetupLightStand(v)
+			end
+		end)
+	end
+
+	local room = CurrentRooms:FindFirstChild(tostring(LatestRoom.Value))
+	if room then
+		HookRoom(room)
+	end
+
+	LatestRoom.Changed:Connect(function()
+		local room = CurrentRooms:FindFirstChild(tostring(LatestRoom.Value))
+		if room then
+			HookRoom(room)
+		end
+	end)
+end)()
