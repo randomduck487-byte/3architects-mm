@@ -1,9 +1,23 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
 
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Remotes = ReplicatedStorage:WaitForChild("RemotesFolder")
+
+-- Safe CoreGui container so Doors cannot wipe it on death/respawn
+local CoreGui = gethui and gethui() or game:GetService("CoreGui")
+
+-- Reset first death flag when `|` (BackSlash) is pressed
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if input.KeyCode == Enum.KeyCode.BackSlash then
+		pcall(function()
+			LocalPlayer:SetAttribute("HasDiedBefore", false)
+			print("[Death Script] First-death status has been reset via BackSlash!")
+		end)
+	end
+end)
 
 local DeathTypes = {
 	["Yellow"] = {"yellow", "curious"},
@@ -15,8 +29,12 @@ local function DeathHint(hints, deathType)
 		return
 	end
 
-	local MainUI = PlayerGui:WaitForChild("MainUI")
-	local Death = MainUI:WaitForChild("Death")
+	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 2)
+	if not PlayerGui then return end
+	local MainUI = PlayerGui:FindFirstChild("MainUI")
+	if not MainUI then return end
+	local Death = MainUI:FindFirstChild("Death")
+	if not Death then return end
 
 	Death:GetPropertyChangedSignal("Visible"):Wait()
 
@@ -32,14 +50,16 @@ local function DeathHint(hints, deathType)
 	end
 
 	if not colour then
-		local MainGame = MainUI:WaitForChild("Initiator"):WaitForChild("Main_Game")
-		local Health = MainGame:WaitForChild("Health")
-		local Music = Health:WaitForChild("Music")
+		local MainGame = MainUI:FindFirstChild("Initiator") and MainUI.Initiator:FindFirstChild("Main_Game")
+		local Health = MainGame and MainGame:FindFirstChild("Health")
+		local Music = Health and Health:FindFirstChild("Music")
 
-		for _, c in next, Music:GetChildren() do
-			if c.Name:lower() == deathType then
-				colour = c.Name
-				break
+		if Music then
+			for _, c in next, Music:GetChildren() do
+				if c.Name:lower() == deathType then
+					colour = c.Name
+					break
+				end
 			end
 		end
 	end
@@ -61,7 +81,7 @@ local deathActive = true
 local stopDeath = function() end
 
 local function HasDeathBackground()
-	return Camera:FindFirstChild("DeathBackgroundBlue", true) ~= nil
+	return Camera and Camera:FindFirstChild("DeathBackgroundBlue", true) ~= nil
 end
 
 local function LockDeath()
@@ -73,15 +93,17 @@ local function LockDeath()
 	stopDeath()
 end
 
-Camera.ChildRemoved:Connect(function(child)
-	if child.Name == "DeathBackgroundBlue" then
-		task.defer(function()
-			if not HasDeathBackground() then
-				LockDeath()
-			end
-		end)
-	end
-end)
+if Camera then
+	Camera.ChildRemoved:Connect(function(child)
+		if child.Name == "DeathBackgroundBlue" then
+			task.defer(function()
+				if not HasDeathBackground() then
+					LockDeath()
+				end
+			end)
+		end
+	end)
+end
 
 local processed = {}
 
@@ -115,27 +137,27 @@ local function Process(model)
 	bigLight.CFrame = bigLight.CFrame * CFrame.new(0, -25, 0)
 	
 	for _, obj in {bigLight, clone, yellowClone} do
-	obj.Size = obj.Size * 3
+		obj.Size = obj.Size * 3
 
-	for _, v in obj:GetDescendants() do
-		if v:IsA("BasePart") then
-			v.Size = v.Size * 3
+		for _, v in obj:GetDescendants() do
+			if v:IsA("BasePart") then
+				v.Size = v.Size * 3
 
-		elseif v:IsA("ParticleEmitter") then
-			local keypoints = {}
+			elseif v:IsA("ParticleEmitter") then
+				local keypoints = {}
 
-			for _, keypoint in v.Size.Keypoints do
-				table.insert(keypoints, NumberSequenceKeypoint.new(
-					keypoint.Time,
-					keypoint.Value * 3,
-					keypoint.Envelope * 3
-				))
+				for _, keypoint in v.Size.Keypoints do
+					table.insert(keypoints, NumberSequenceKeypoint.new(
+						keypoint.Time,
+						keypoint.Value * 3,
+						keypoint.Envelope * 3
+					))
+				end
+
+				v.Size = NumberSequence.new(keypoints)
 			end
-
-			v.Size = NumberSequence.new(keypoints)
 		end
 	end
-end
 
 	for _, v in bigLight:GetDescendants() do
 		if v:IsA("ParticleEmitter") then
@@ -241,34 +263,34 @@ end
 		yellowFogClone.Parent = fog.Parent
 		
 		for _, fogPart in {fog, fogClone, yellowFogClone} do
-	for _, v in fogPart:GetDescendants() do
-		if v:IsA("ParticleEmitter") then
-			local keypoints = {}
+			for _, v in fogPart:GetDescendants() do
+				if v:IsA("ParticleEmitter") then
+					local keypoints = {}
 
-			for _, keypoint in v.Size.Keypoints do
-				table.insert(keypoints, NumberSequenceKeypoint.new(
-					keypoint.Time,
-					keypoint.Value * 1.7,
-					keypoint.Envelope * 1.7
-				))
+					for _, keypoint in v.Size.Keypoints do
+						table.insert(keypoints, NumberSequenceKeypoint.new(
+							keypoint.Time,
+							keypoint.Value * 1.7,
+							keypoint.Envelope * 1.7
+						))
+					end
+
+					v.Size = NumberSequence.new(keypoints)
+				end
 			end
-
-			v.Size = NumberSequence.new(keypoints)
 		end
-	end
-end
 
-fogClone:GetPropertyChangedSignal("Size"):Connect(function()
-	if fogClone.Size ~= fog.Size then
-		fogClone.Size = fog.Size
-	end
-end)
+		fogClone:GetPropertyChangedSignal("Size"):Connect(function()
+			if fogClone.Size ~= fog.Size then
+				fogClone.Size = fog.Size
+			end
+		end)
 
-yellowFogClone:GetPropertyChangedSignal("Size"):Connect(function()
-	if yellowFogClone.Size ~= fog.Size then
-		yellowFogClone.Size = fog.Size
-	end
-end)
+		yellowFogClone:GetPropertyChangedSignal("Size"):Connect(function()
+			if yellowFogClone.Size ~= fog.Size then
+				yellowFogClone.Size = fog.Size
+			end
+		end)
 
 		for _, v in fog:GetDescendants() do
 			if v:IsA("BasePart") then
@@ -328,644 +350,439 @@ end)
 	end
 end
 
-Camera.DescendantAdded:Connect(function(instance)
-	if instance.Name == "DeathBackgroundBlue" then
-		Process(instance)
-	end
-end)
+if Camera then
+	Camera.DescendantAdded:Connect(function(instance)
+		if instance.Name == "DeathBackgroundBlue" then
+			Process(instance)
+		end
+	end)
 
-local existing = Camera:FindFirstChild("DeathBackgroundBlue")
-if existing then
-	Process(existing)
+	local existing = Camera:FindFirstChild("DeathBackgroundBlue")
+	if existing then
+		Process(existing)
+	end
 end
 
-local Players = game:GetService("Players")
-local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
-local MainUI = PlayerGui:WaitForChild("MainUI")
-local MainGame = MainUI:WaitForChild("Initiator"):WaitForChild("Main_Game")
-local Health = MainGame:WaitForChild("Health")
-local Music = Health:WaitForChild("Music")
-
--- Hàm tải âm thanh từ GitHub
-local function GetGitSound(GithubSnd, SoundName)
-	local url = GithubSnd
-	if not isfile(SoundName .. ".mp3") then
-		writefile(SoundName .. ".mp3", game:HttpGet(url))
-	end
-	local sound = Instance.new("Sound")
-	sound.SoundId = (getcustomasset or getsynasset)(SoundName .. ".mp3")
-	return sound
-end
-
-local blueSound = Music:WaitForChild("Blue")
-local gitSoundTemp = GetGitSound("https://github.com/lynguyen26031993-design/-u/raw/refs/heads/main/Lhouijie%20Almendras%20-%20theme%203%20atchitects%20-%201786262801229%202026-08-09%2012_06.mp3?raw=true", "vjjdjjjfjhh")
-
-blueSound.SoundId = gitSoundTemp.SoundId
-blueSound.PlaybackSpeed = 1
-blueSound.Volume = 2
-
-gitSoundTemp:Destroy()
-
-local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-
-local Camera = workspace:WaitForChild("Camera")
-
-local function IsDeathBackground(obj)
-	return obj:IsA("Model") and obj.Name == "DeathBackgroundBlue"
-end
 
 local function RunScript()
-	if not deathActive or not HasDeathBackground() then
-		return
+	if Camera then
+		Camera.FieldOfView = 120
+		Camera:GetPropertyChangedSignal("FieldOfView"):Connect(function()
+			Camera.FieldOfView = 120
+		end)
 	end
-	
-Camera.FieldOfView = 120
 
-Camera:GetPropertyChangedSignal("FieldOfView"):Connect(function()
-	Camera.FieldOfView = 120
-end)
+	local hasDiedBefore = LocalPlayer:GetAttribute("HasDiedBefore")
 
-	local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+	-- Mute Doors default music and play custom standalone music from local file
+	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 2)
+	if PlayerGui then
+		local MainUI = PlayerGui:FindFirstChild("MainUI")
+		if MainUI then
+			local MainGame = MainUI:FindFirstChild("Initiator") and MainUI.Initiator:FindFirstChild("Main_Game")
+			local Health = MainGame and MainGame:FindFirstChild("Health")
+			local Music = Health and Health:FindFirstChild("Music")
+			if Music then
+				for _, c in next, Music:GetChildren() do
+					if c:IsA("Sound") then
+						c.Volume = 0
+						c:Stop()
+					end
+				end
+			end
+		end
+	end
 
-local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local customSound = Instance.new("Sound")
+	customSound.Name = "DeathCustomMusic"
+	customSound.Parent = SoundService
+	customSound.Volume = 2
 
-local Gui = Instance.new("ScreenGui")
-Gui.Name = "DeathTextGui"
-Gui.ResetOnSpawn = false
-Gui.IgnoreGuiInset = true
-Gui.DisplayOrder = 999999
-Gui.Parent = PlayerGui
-
--- ==================== GUIDING TEXT (Left Light) ====================
-local GuidingText = Instance.new("TextLabel")
-GuidingText.Name = "GuidingText"
-GuidingText.AnchorPoint = Vector2.new(0.5, 0.5)
-GuidingText.Position = UDim2.new(0.30, -250, 0.39, 0)
-GuidingText.Size = UDim2.fromOffset(900, 250)
-GuidingText.BackgroundTransparency = 1
-GuidingText.BorderSizePixel = 0
-GuidingText.Visible = false
-GuidingText.ZIndex = 999999
-GuidingText.Font = Enum.Font.Oswald
-GuidingText.TextColor3 = Color3.fromRGB(158, 239, 255)
-GuidingText.TextSize = 33
-GuidingText.TextWrapped = true
-GuidingText.TextScaled = false
-GuidingText.TextXAlignment = Enum.TextXAlignment.Center
-GuidingText.TextYAlignment = Enum.TextYAlignment.Center
-GuidingText.TextTransparency = 0
-GuidingText.Parent = Gui
-
--- ==================== MIS TEXT (Middle Light) ====================
-local MisText = Instance.new("TextLabel")
-MisText.Name = "MisText"
-MisText.AnchorPoint = Vector2.new(0.5, 0.5)
-MisText.Position = UDim2.new(0.65, -250, 0.45, 0)
-MisText.Size = UDim2.fromOffset(900, 250)
-MisText.BackgroundTransparency = 1
-MisText.BorderSizePixel = 0
-MisText.Visible = false
-MisText.ZIndex = 999999
-MisText.Font = Enum.Font.Oswald
-MisText.TextColor3 = Color3.fromRGB(255, 92, 92)
-MisText.TextSize = 33
-MisText.TextWrapped = true
-MisText.TextScaled = false
-MisText.TextXAlignment = Enum.TextXAlignment.Center
-MisText.TextYAlignment = Enum.TextYAlignment.Center
-MisText.TextTransparency = 0
-MisText.Parent = Gui
-
--- ==================== CURIOUS TEXT (Right Light) ====================
-local CuriousText = Instance.new("TextLabel")
-CuriousText.Name = "CuriousText"
-CuriousText.AnchorPoint = Vector2.new(0.5, 0.5)
-CuriousText.Position = UDim2.new(0.98, -250, 0.39, 0)
-CuriousText.Size = UDim2.fromOffset(900, 250)
-CuriousText.BackgroundTransparency = 1
-CuriousText.BorderSizePixel = 0
-CuriousText.Visible = false
-CuriousText.ZIndex = 999999
-CuriousText.Font = Enum.Font.Oswald
-CuriousText.TextColor3 = Color3.fromRGB(255, 239, 158)
-CuriousText.TextSize = 33
-CuriousText.TextWrapped = true
-CuriousText.TextScaled = false
-CuriousText.TextXAlignment = Enum.TextXAlignment.Center
-CuriousText.TextYAlignment = Enum.TextYAlignment.Center
-CuriousText.TextTransparency = 0
-CuriousText.Parent = Gui
-
-
--- ==================== HÀM ANIMATION & TYPE TEXT RIÊNG BIỆT ====================
-
--- 1. GuidingText Functions
-local function StartGuidingAnimation()
-	task.spawn(function()
-		while GuidingText and GuidingText.Parent do
-			local tween1 = TweenService:Create(GuidingText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = 2})
-			tween1:Play()
-			tween1.Completed:Wait()
-			if not GuidingText or not GuidingText.Parent then break end
-
-			local tween2 = TweenService:Create(GuidingText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = -2})
-			tween2:Play()
-			tween2.Completed:Wait()
+	local success, customId = pcall(function()
+		if readfile and (getcustomasset or getsynasset) then
+			local content = readfile([[C:\Users\MSI\AppData\Local\Real\workspace\idk.mp3]])
+			local tempName = "death_custom_music_temp"
+			if not isfile(tempName .. ".mp3") then
+				writefile(tempName .. ".mp3", content)
+			end
+			return (getcustomasset or getsynasset)(tempName .. ".mp3")
 		end
 	end)
-end
 
-local guidingVersion = 0
-local guidingTween
-local function TypeGuiding(text)
-	if not deathActive or not HasDeathBackground() then
-		return
+	if success and customId then
+		customSound.SoundId = customId
+	else
+		customSound.SoundId = "rbxassetid://96377507894391"
 	end
 
-	guidingVersion += 1
-	local currentVersion = guidingVersion
-	if guidingTween then guidingTween:Cancel() guidingTween = nil end
+	customSound:Play()
 
-	GuidingText.Visible = true
-	GuidingText.TextTransparency = 0
-	GuidingText.Text = ""
+	local Gui = Instance.new("ScreenGui")
+	Gui.Name = "DeathTextGui"
+	Gui.ResetOnSpawn = false
+	Gui.IgnoreGuiInset = true
+	Gui.DisplayOrder = 999999
+	Gui.Parent = CoreGui
 
-	local words = {}
-	for word in text:gmatch("%S+") do table.insert(words, word) end
-	local lines, line = {}, {}
-	for _, word in ipairs(words) do
-		table.insert(line, word)
-		if #line == 6 then table.insert(lines, table.concat(line, " ")); line = {} end
+	-- Guiding Text (Left - Blue)
+	local GuidingText = Instance.new("TextLabel")
+	GuidingText.Name = "GuidingText"
+	GuidingText.AnchorPoint = Vector2.new(0.5, 0.5)
+	GuidingText.Position = UDim2.new(0.15, 0, 0.5, 0)
+	GuidingText.Size = UDim2.fromOffset(500, 250)
+	GuidingText.BackgroundTransparency = 1
+	GuidingText.Visible = false
+	GuidingText.ZIndex = 999999
+	GuidingText.Font = Enum.Font.Oswald
+	GuidingText.TextColor3 = Color3.fromRGB(158, 239, 255)
+	GuidingText.TextSize = 33
+	GuidingText.TextWrapped = true
+	GuidingText.Parent = Gui
+
+	-- Mis Text (Middle - Red)
+	local MisText = Instance.new("TextLabel")
+	MisText.Name = "MisText"
+	MisText.AnchorPoint = Vector2.new(0.5, 0.5)
+	MisText.Position = UDim2.new(0.5, 0, 0.65, 0)
+	MisText.Size = UDim2.fromOffset(500, 250)
+	MisText.BackgroundTransparency = 1
+	MisText.Visible = false
+	MisText.ZIndex = 999999
+	MisText.Font = Enum.Font.Oswald
+	MisText.TextColor3 = Color3.fromRGB(255, 92, 92)
+	MisText.TextSize = 33
+	MisText.TextWrapped = true
+	MisText.Parent = Gui
+
+	-- Curious Text (Right - Yellow)
+	local CuriousText = Instance.new("TextLabel")
+	CuriousText.Name = "CuriousText"
+	CuriousText.AnchorPoint = Vector2.new(0.5, 0.5)
+	CuriousText.Position = UDim2.new(0.85, 0, 0.5, 0)
+	CuriousText.Size = UDim2.fromOffset(500, 250)
+	CuriousText.BackgroundTransparency = 1
+	CuriousText.Visible = false
+	CuriousText.ZIndex = 999999
+	CuriousText.Font = Enum.Font.Oswald
+	CuriousText.TextColor3 = Color3.fromRGB(255, 239, 158)
+	CuriousText.TextSize = 33
+	CuriousText.TextWrapped = true
+	CuriousText.Parent = Gui
+
+	-- Animations
+	local function StartGuidingAnimation()
+		task.spawn(function()
+			while GuidingText and GuidingText.Parent do
+				local t1 = TweenService:Create(GuidingText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = 2})
+				t1:Play() t1.Completed:Wait()
+				if not GuidingText or not GuidingText.Parent then break end
+				local t2 = TweenService:Create(GuidingText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = -2})
+				t2:Play() t2.Completed:Wait()
+			end
+		end)
 	end
-	if #line > 0 then table.insert(lines, table.concat(line, " ")) end
-	local formattedText = table.concat(lines, "\n")
 
-	for i = 1, #formattedText do
-		if not deathActive or not HasDeathBackground() or currentVersion ~= guidingVersion then
-	return
-end
-		GuidingText.Text = formattedText:sub(1, i)
-		task.wait(0.02)
+	local function StartMisAnimation()
+		task.spawn(function()
+			while MisText and MisText.Parent do
+				local t1 = TweenService:Create(MisText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = 2})
+				t1:Play() t1.Completed:Wait()
+				if not MisText or not MisText.Parent then break end
+				local t2 = TweenService:Create(MisText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = -2})
+				t2:Play() t2.Completed:Wait()
+			end
+		end)
 	end
 
-	local cooldownEnd = os.clock() + 5
-	while os.clock() < cooldownEnd do
-		if currentVersion ~= guidingVersion then return end
-		task.wait()
+	local function StartCuriousAnimation()
+		task.spawn(function()
+			while CuriousText and CuriousText.Parent do
+				local t1 = TweenService:Create(CuriousText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = 2})
+				t1:Play() t1.Completed:Wait()
+				if not CuriousText or not CuriousText.Parent then break end
+				local t2 = TweenService:Create(CuriousText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = -2})
+				t2:Play() t2.Completed:Wait()
+			end
+		end)
 	end
-	if currentVersion ~= guidingVersion then return end
 
-	guidingTween = TweenService:Create(GuidingText, TweenInfo.new(1, Enum.EasingStyle.Linear), {TextTransparency = 1})
-	guidingTween:Play()
-	while guidingTween.PlaybackState == Enum.PlaybackState.Playing do
-		if currentVersion ~= guidingVersion then
-			guidingTween:Cancel() guidingTween = nil
-			GuidingText.TextTransparency = 0
-			GuidingText.Visible = false
-			return
+	local function TypeText(label, text)
+		task.spawn(function()
+			if not label or not label.Parent then return end
+			label.Visible = true
+			label.TextTransparency = 0
+			label.Text = ""
+
+			local words = {}
+			for word in text:gmatch("%S+") do table.insert(words, word) end
+			local lines, line = {}, {}
+			for _, word in ipairs(words) do
+				table.insert(line, word)
+				if #line == 6 then table.insert(lines, table.concat(line, " ")); line = {} end
+			end
+			if #line > 0 then table.insert(lines, table.concat(line, " ")) end
+			local formattedText = table.concat(lines, "\n")
+
+			for i = 1, #formattedText do
+				if not label or not label.Parent then return end
+				label.Text = formattedText:sub(1, i)
+				task.wait(0.01)
+			end
+
+			task.wait(2.5)
+
+			if label and label.Parent then
+				local tw = TweenService:Create(label, TweenInfo.new(0.5, Enum.EasingStyle.Linear), {TextTransparency = 1})
+				tw:Play()
+				tw.Completed:Wait()
+				if label and label.Parent then
+					label.Text = ""
+					label.Visible = false
+					label.TextTransparency = 0
+				end
+			end
+		end)
+	end
+
+	local function TypeGuiding(txt) TypeText(GuidingText, txt) end
+	local function TypeMis(txt) TypeText(MisText, txt) end
+	local function TypeCurious(txt) TypeText(CuriousText, txt) end
+
+	stopDeath = function()
+		if Gui then Gui:Destroy() end
+	end
+
+	StartGuidingAnimation()
+	StartMisAnimation()
+	StartCuriousAnimation()
+
+	if not hasDiedBefore then
+		LocalPlayer:SetAttribute("HasDiedBefore", true)
+
+		-- ==========================================
+		-- PART 1: FIRST 17 LINES (First Death)
+		-- ==========================================
+		task.spawn(function()
+			task.wait(2)
+			TypeGuiding("WHAT?")
+			task.wait(2)
+			TypeMis("What was that, What WAS that?")
+			task.wait(2.5)
+			TypeCurious("I'm scanning the room. There is...")
+			task.wait(2)
+			TypeGuiding("Check again.")
+			task.wait(2.5)
+			TypeCurious("I am. The room reads as empty. It...")
+			task.wait(2.5)
+			TypeMis("That's not right. I watched it happen.")
+			task.wait(2.5)
+			TypeGuiding("I FELT it happen.")
+			task.wait(2)
+			TypeCurious("I have no record of this.")
+			task.wait(2.5)
+			TypeCurious("Not in this hotel. Not in any archive!")
+			task.wait(2.5)
+			TypeGuiding("That is not possible.")
+			task.wait(2.5)
+			TypeCurious("I understand that. But the hotel does...")
+			task.wait(2.5)
+			TypeCurious("The floor plan is intact. The room...")
+			task.wait(2.5)
+			TypeMis("It has no designation. No...")
+			task.wait(2.5)
+			TypeCurious("Could it be one of yours? Something...")
+			task.wait(2.5)
+			TypeMis("Nothing of mine moves like that.")
+			task.wait(2.5)
+			TypeGuiding("The doors never opened for it—")
+			task.wait(2)
+			TypeMis("—because it didn't need them to.")
+		end)
+
+		local startTime = os.clock()
+		while os.clock() - startTime < 45 do
+			task.wait(0.5)
 		end
-		task.wait()
-	end
-	if currentVersion == guidingVersion then 
-		guidingTween = nil 
-		GuidingText.Text = "" 
-		GuidingText.Visible = false
-	end
-end
+	else
+		-- ==========================================
+		-- PART 2: REMAINING 17 LINES (Subsequent Deaths)
+		-- ==========================================
+		task.spawn(function()
+			task.wait(2)
+			TypeGuiding("...it is not from here.")
+			task.wait(2.5)
+			TypeGuiding("Then it is trespassing in MY...")
+			task.wait(2)
+			TypeCurious("Our hotel.")
+			task.wait(1.5)
+			TypeMis("Not the point.")
+			task.wait(2.5)
+			TypeCurious("Whatever it was, it left something...")
+			task.wait(2.5)
+			TypeGuiding("I see it too. The geometry is...")
+			task.wait(2.5)
+			TypeMis("It broke the hotel?")
+			task.wait(2)
+			TypeGuiding("No. It confused it.")
+			task.wait(2)
+			TypeCurious("The hotel tried to...")
+			task.wait(2.5)
+			TypeCurious("I have never seen the hotel fail at...")
+			task.wait(2.5)
+			TypeMis("Neither have I.")
+			task.wait(2.5)
+			TypeGuiding("Agreed. No reports. Not a word outside.")
+			task.wait(3)
+			TypeCurious("...We need to find out what that thing...")
+			task.wait(3)
+			TypeCurious("I will start looking where the records...")
+			task.wait(2.5)
+			TypeMis("And you...")
+			task.wait(2.5)
+			TypeGuiding("If you see it again, run. We cannot...")
+			task.wait(2.5)
+			TypeCurious("Don't tell anyone about this.")
+		end)
 
+		local startTime = os.clock()
+		while os.clock() - startTime < 50 do
+			task.wait(0.5)
+		end
+	end
 
--- 2. MisText Functions
-local function StartMisAnimation()
+	-- Transition Ending Images & Fades
+	local gui2 = Instance.new("ScreenGui")
+	gui2.Name = "ImageGui"
+	gui2.IgnoreGuiInset = true
+	gui2.ResetOnSpawn = false
+	gui2.Parent = CoreGui
+
+	local image2 = Instance.new("ImageLabel")
+	image2.Size = UDim2.fromScale(1, 1)
+	image2.BackgroundTransparency = 1
+	image2.Image = "rbxassetid://72568867702176"
+	image2.ScaleType = Enum.ScaleType.Stretch
+	image2.Parent = gui2
+	image2.ZIndex = 999999
+	image2.Visible = false
+
+	task.wait(2)
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "ImageFade"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.Parent = CoreGui
+
+	local image = Instance.new("ImageLabel")
+	image.Size = UDim2.fromScale(1, 1)
+	image.BackgroundTransparency = 1
+	image.Image = "rbxassetid://116600254264450"
+	image.ImageTransparency = 1
+	image.ZIndex = 999998
+	image.ScaleType = Enum.ScaleType.Stretch
+	image.Parent = gui
+
+	local running = true
 	task.spawn(function()
-		while MisText and MisText.Parent do
-			local tween1 = TweenService:Create(MisText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = 2})
-			tween1:Play()
-			tween1.Completed:Wait()
-			if not MisText or not MisText.Parent then break end
-
-			local tween2 = TweenService:Create(MisText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = -2})
-			tween2:Play()
-			tween2.Completed:Wait()
+		while running do
+			task.wait(0.3)
+			if not running then break end
+			image.Image = "rbxassetid://125298203990706"
+			task.wait(0.3)
+			if not running then break end
+			image.Image = "rbxassetid://116600254264450"
 		end
 	end)
-end
 
-local misVersion = 0
-local misTween
-local function TypeMis(text)
-	if not deathActive or not HasDeathBackground() then
-		return
-	end
+	local tween = TweenService:Create(image, TweenInfo.new(3, Enum.EasingStyle.Linear), {ImageTransparency = 0})
 
-	misVersion += 1
-	local currentVersion = misVersion
-	if misTween then misTween:Cancel() misTween = nil end
+	task.delay(1.5, function()
+		local RunService = game:GetService("RunService")
+		local ended = Instance.new("Sound")
+		ended.Parent = workspace
+		ended.TimePosition = 0.2
+		ended.SoundId = "rbxassetid://96377507894391"
+		ended.Volume = 3
+		ended:Play()
 
-	MisText.Visible = true
-	MisText.TextTransparency = 0
-	MisText.Text = ""
+		local connection
+		connection = RunService.Heartbeat:Connect(function()
+			if ended.TimeLength > 0 and ended.TimeLength - ended.TimePosition <= 1 then
+				image2.Visible = true
+				connection:Disconnect()
+				task.wait(1)
+				gui:Destroy() 
+				gui2:Destroy() 
+				task.spawn(function() 
+					local guiBlack = Instance.new("ScreenGui")
+					guiBlack.Name = "BlackFade"
+					guiBlack.IgnoreGuiInset = true
+					guiBlack.ResetOnSpawn = false
+					guiBlack.Parent = CoreGui
 
-	local words = {}
-	for word in text:gmatch("%S+") do table.insert(words, word) end
-	local lines, line = {}, {}
-	for _, word in ipairs(words) do
-		table.insert(line, word)
-		if #line == 6 then table.insert(lines, table.concat(line, " ")); line = {} end
-	end
-	if #line > 0 then table.insert(lines, table.concat(line, " ")) end
-	local formattedText = table.concat(lines, "\n")
+					local frame = Instance.new("Frame")
+					frame.Size = UDim2.fromScale(1, 1)
+					frame.BackgroundColor3 = Color3.new(0, 0, 0)
+					frame.BorderSizePixel = 0
+					frame.Parent = guiBlack
 
-	for i = 1, #formattedText do
-		if not deathActive or not HasDeathBackground() or currentVersion ~= misVersion then
-	return
-end
-		MisText.Text = formattedText:sub(1, i)
-		task.wait(0.02)
-	end
-
-	local cooldownEnd = os.clock() + 5
-	while os.clock() < cooldownEnd do
-		if currentVersion ~= misVersion then return end
-		task.wait()
-	end
-	if currentVersion ~= misVersion then return end
-
-	misTween = TweenService:Create(MisText, TweenInfo.new(1, Enum.EasingStyle.Linear), {TextTransparency = 1})
-	misTween:Play()
-	while misTween.PlaybackState == Enum.PlaybackState.Playing do
-		if currentVersion ~= misVersion then
-			misTween:Cancel() misTween = nil
-			MisText.TextTransparency = 0
-			MisText.Visible = false
-			return
-		end
-		task.wait()
-	end
-	if currentVersion == misVersion then 
-		misTween = nil 
-		MisText.Text = "" 
-		MisText.Visible = false 
-	end
-end
-
-
--- 3. CuriousText Functions
-local function StartCuriousAnimation()
-	task.spawn(function()
-		while CuriousText and CuriousText.Parent do
-			local tween1 = TweenService:Create(CuriousText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = 2})
-			tween1:Play()
-			tween1.Completed:Wait()
-			if not CuriousText or not CuriousText.Parent then break end
-
-			local tween2 = TweenService:Create(CuriousText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Rotation = -2})
-			tween2:Play()
-			tween2.Completed:Wait()
-		end
+					task.wait(1.5)
+					TweenService:Create(frame, TweenInfo.new(2, Enum.EasingStyle.Linear), {BackgroundTransparency = 1}):Play()
+				end) 
+			end
+		end)
 	end)
-end
 
-local curiousVersion = 0
-local curiousTween
-local function TypeCurious(text)
-	if not deathActive or not HasDeathBackground() then
-		return
-	end
-
-	curiousVersion += 1
-	local currentVersion = curiousVersion
-	if curiousTween then curiousTween:Cancel() curiousTween = nil end
-
-	CuriousText.Visible = true
-	CuriousText.TextTransparency = 0
-	CuriousText.Text = ""
-
-	local words = {}
-	for word in text:gmatch("%S+") do table.insert(words, word) end
-	local lines, line = {}, {}
-	for _, word in ipairs(words) do
-		table.insert(line, word)
-		if #line == 6 then table.insert(lines, table.concat(line, " ")); line = {} end
-	end
-	if #line > 0 then table.insert(lines, table.concat(line, " ")) end
-	local formattedText = table.concat(lines, "\n")
-
-	for i = 1, #formattedText do
-		if not deathActive or not HasDeathBackground() or currentVersion ~= curiousVersion then
-	return
-end
-		CuriousText.Text = formattedText:sub(1, i)
-		task.wait(0.02)
-	end
-
-	local cooldownEnd = os.clock() + 5
-	while os.clock() < cooldownEnd do
-		if currentVersion ~= curiousVersion then return end
-		task.wait()
-	end
-	if currentVersion ~= curiousVersion then return end
-
-	curiousTween = TweenService:Create(CuriousText, TweenInfo.new(1, Enum.EasingStyle.Linear), {TextTransparency = 1})
-	curiousTween:Play()
-	while curiousTween.PlaybackState == Enum.PlaybackState.Playing do
-		if currentVersion ~= curiousVersion then
-			curiousTween:Cancel() curiousTween = nil
-			CuriousText.TextTransparency = 0
-			CuriousText.Visible = false
-			return
-		end
-		task.wait()
-	end
-	if currentVersion == curiousVersion then 
-		curiousTween = nil 
-		CuriousText.Text = "" 
-		CuriousText.Visible = false 
-	end
-end
-
-stopDeath = function()
-	guidingVersion += 1
-	misVersion += 1
-	curiousVersion += 1
-
-	if guidingTween then
-		guidingTween:Cancel()
-		guidingTween = nil
-	end
-
-	if misTween then
-		misTween:Cancel()
-		misTween = nil
-	end
-
-	if curiousTween then
-		curiousTween:Cancel()
-		curiousTween = nil
-	end
-
-	if GuidingText then
-		GuidingText:Destroy()
-	end
-
-	if MisText then
-		MisText:Destroy()
-	end
-
-	if CuriousText then
-		CuriousText:Destroy()
-	end
-
-	if Gui then
-		Gui:Destroy()
-	end
-end
-
-
--- ==================== CHẠY THỬ NGHIỆM ====================
-
-StartGuidingAnimation()
-StartMisAnimation()
-StartCuriousAnimation()
-
-local r = math.random(1,3)
-
-if r == 1 then
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "You're back. I'm sorry.. we watched the whole thing.")
-
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "Whatever that was.. it clearly wasn't itself. It were Ripper.. then it wasn't Ripper.")
-
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "It has no shape of its own. It borrows. It mimics..")
-
-task.wait(3.5)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeCurious, "Nothing in my records matches it. Nothing. That never happens.")
-
-task.wait(5)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeCurious, "Give me time. I'll dig. Next time we speak. I'll know more.")
-
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeMis, "...are you hurt?")
-
-task.wait(3.5)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeMis, "I don't understand this one. I don't like NOT understanding.")
-
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "Stay near the others. And keep your eyes off it when you can.")
-elseif r == 2 then
-
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeCurious, "Still cataloguing. It refuses to stay one thing long enough to")
-
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "Then don't name it. Outlast it. ")
-
-task.wait(6)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeMis, "I almost had it. For a second, I had it.")
-
-task.wait(5)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "There was nothing more we could do from here.")
-
-task.wait(5)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeMis, "Next run. Next run I will be faster.")
-task.wait(7)
-elseif r == 3 then
-task.wait(4)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeCurious, "Every copy it wears is slightly wrong.")
-
-task.wait(6)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "If something feels wrong, treat it as")
-
-task.wait(6)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeMis, "Or just run. Running also works. ")
-
-task.wait(6)
-if not deathActive or not HasDeathBackground() then return end
-
-task.spawn(TypeGuiding, "We'll be watching. We always are. ")
-task.wait(7)
-end
-
-local Players = game:GetService("Players")
-local gui2 = Instance.new("ScreenGui")
-gui2.Name = "ImageGui"
-gui2.IgnoreGuiInset = true
-gui2.ResetOnSpawn = false
-gui2.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-
-local image2 = Instance.new("ImageLabel")
-image2.Size = UDim2.fromScale(1, 1)
-image2.Position = UDim2.fromScale(0, 0)
-image2.BackgroundTransparency = 1
-image2.Image = "rbxassetid://72568867702176"
-image2.ScaleType = Enum.ScaleType.Stretch
-image2.Parent = gui
-image2.ZIndex = 999999
-image2.Visible = false
-
-task.wait(8)
-local TweenService = game:GetService("TweenService")
-local Players = game:GetService("Players")
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "ImageFade"
-gui.IgnoreGuiInset = true
-gui.ResetOnSpawn = false
-gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-
-local image = Instance.new("ImageLabel")
-image.Size = UDim2.fromScale(1, 1)
-image.Position = UDim2.fromScale(0, 0)
-image.BackgroundTransparency = 1
-image.Image = "rbxassetid://116600254264450"
-image.ImageTransparency = 1
-image.ZIndex = 999998
-image.ScaleType = Enum.ScaleType.Stretch
-image.Parent = gui
-
-local running = true
-
-task.spawn(function()
-	while running do
-		task.wait(0.3)
-		if not running then break end
-		image.Image = "rbxassetid://125298203990706"
-
-		task.wait(0.3)
-		if not running then break end
-		image.Image = "rbxassetid://116600254264450"
-	end
-end)
-
-local tween = TweenService:Create(
-	image,
-	TweenInfo.new(4, Enum.EasingStyle.Linear),
-	{ImageTransparency = 0}
-)
-
-task.delay(3.3, function()
-	local RunService = game:GetService("RunService")
-
-local ended = Instance.new("Sound")
-ended.Parent = workspace
-ended.TimePosition = 0.2
-ended.SoundId = "rbxassetid://96377507894391"
-ended.Volume = 3
-
-ended:Play()
-
-local connection
-connection = RunService.Heartbeat:Connect(function()
-	if ended.TimeLength > 0 and ended.TimeLength - ended.TimePosition <= 1 then
- image2.Visible = true
-		connection:Disconnect()
-		task.wait(1)
-		gui:Destroy() 
-		gui2:Destroy() 
-		task.spawn(function() 
-		local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "BlackFade"
-gui.IgnoreGuiInset = true
-gui.ResetOnSpawn = false
-gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.fromScale(1, 1)
-frame.Position = UDim2.fromScale(0, 0)
-frame.BackgroundColor3 = Color3.new(0, 0, 0)
-frame.BorderSizePixel = 0
-frame.Parent = gui
-
-task.wait(2)
-
-TweenService:Create(
-	frame,
-	TweenInfo.new(3, Enum.EasingStyle.Linear),
-	{BackgroundTransparency = 1}
-):Play()
-end) 
-	end
-end)
-end)
-
-tween:Play()
-tween.Completed:Wait()
-
-running = false
+	tween:Play()
+	tween.Completed:Wait()
+	running = false
 end
 
 local triggered = false
 local connection
 
 local function Trigger()
-	if triggered or not deathActive or not HasDeathBackground() then
+	if triggered or not deathActive then
 		return
 	end
-
+	
+	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 2)
+	local MainUI = PlayerGui and PlayerGui:FindFirstChild("MainUI")
+	local Death = MainUI and MainUI:FindFirstChild("Death")
+	
+	if Death then
+		repeat task.wait(0.1) until Death.Visible or not deathActive
+	else
+		task.wait(1.5)
+	end
+	
+	if not deathActive or triggered then return end
 	triggered = true
-
+	
 	if connection then
 		connection:Disconnect()
 		connection = nil
 	end
-
 	RunScript()
 end
 
-for _, obj in ipairs(Camera:GetDescendants()) do
-	if IsDeathBackground(obj) then
-		Trigger()
-		break
+if Camera then
+	for _, obj in ipairs(Camera:GetDescendants()) do
+		if obj:IsA("Model") and obj.Name == "DeathBackgroundBlue" then
+			Trigger()
+			break
+		end
 	end
 end
 
-if not triggered then
+if not triggered and Camera then
 	connection = Camera.DescendantAdded:Connect(function(obj)
-		if IsDeathBackground(obj) then
+		if obj:IsA("Model") and obj.Name == "DeathBackgroundBlue" then
 			Trigger()
 		end
 	end)
 end
 
-DeathHint({
-"", "", "", "", "", "", "", ""
-}, "Guiding")
+DeathHint({"", "", "", "", "", "", "", ""}, "Guiding")
